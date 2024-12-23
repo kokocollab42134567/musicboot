@@ -9,10 +9,6 @@ const { readFile } = require('fs/promises');
 const YOUTUBE_API_KEY = 'AIzaSyDgORcM6m3xtUvLD27xtaOiBh6ih_DnzKg'; // Replace with your YouTube Data API Key
 const YOUTUBE_API_URL = 'https://www.googleapis.com/youtube/v3/search';
 
-// List of temporary file paths
-const tempPaths = ['./temp1.mp3', './temp2.mp3', './temp3.mp3', './temp4.mp3', './temp5.mp3'];
-let tempIndex = 0; // Index to track current temp file
-
 // Function to search for music on YouTube
 const searchMusicOnYouTube = async (query) => {
     try {
@@ -50,40 +46,6 @@ const downloadMusicAsMP3 = async (url, outputPath) => {
     } catch (error) {
         console.error('Error downloading MP3:', error);
         throw error;
-    }
-};
-
-// Function to process a single message
-const processMessage = async (sock, sender, text) => {
-    if (text.startsWith('search music')) {
-        const musicQuery = text.replace('search music', '').trim();
-        const videoUrl = await searchMusicOnYouTube(musicQuery);
-
-        if (videoUrl) {
-            // Use the next available temp file
-            const outputPath = tempPaths[tempIndex];
-            tempIndex = (tempIndex + 1) % tempPaths.length; // Rotate tempIndex for next request
-
-            try {
-                await downloadMusicAsMP3(videoUrl, outputPath);
-
-                // Send the audio file
-                console.log('Sending audio to WhatsApp...');
-                const audioBuffer = await readFile(outputPath);
-                await sock.sendMessage(sender, {
-                    audio: audioBuffer,
-                    mimetype: 'audio/mpeg',
-                });
-
-                console.log('Audio sent successfully!');
-                fs.unlinkSync(outputPath); // Clean up the file
-            } catch (error) {
-                console.error('Error downloading or sending MP3:', error);
-                await sock.sendMessage(sender, { text: 'Sorry, I could not download or send the music.' });
-            }
-        } else {
-            await sock.sendMessage(sender, { text: 'No music found for your query.' });
-        }
     }
 };
 
@@ -126,10 +88,33 @@ const startSock = async () => {
 
             console.log(`Message from ${sender}: ${text}`);
 
-            // Process the message asynchronously
-            processMessage(sock, sender, text).catch((err) =>
-                console.error(`Error processing message from ${sender}:`, err)
-            );
+            if (text.startsWith('search music')) {
+                const musicQuery = text.replace('search music', '').trim();
+                const videoUrl = await searchMusicOnYouTube(musicQuery);
+
+                if (videoUrl) {
+                    const outputPath = './temp.mp3';
+                    try {
+                        await downloadMusicAsMP3(videoUrl, outputPath);
+
+                        // Send the audio file
+                        console.log('Sending audio to WhatsApp...');
+                        const audioBuffer = await readFile(outputPath);
+                        await sock.sendMessage(sender, {
+                            audio: audioBuffer,
+                            mimetype: 'audio/mpeg',
+                        });
+
+                        console.log('Audio sent successfully!');
+                        fs.unlinkSync(outputPath); // Clean up the file
+                    } catch (error) {
+                        console.error('Error downloading or sending MP3:', error);
+                        await sock.sendMessage(sender, { text: 'Sorry, I could not download or send the music.' });
+                    }
+                } else {
+                    await sock.sendMessage(sender, { text: 'No music found for your query.' });
+                }
+            }
         }
     });
 
